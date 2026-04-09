@@ -1,24 +1,11 @@
 (() => {
   const PUBLIC_ROOM_ID = "public-live-map";
-  const DEFAULT_INTERVAL_MS = 60_000;
-  const FOCUS_INTERVAL_MS = 10_000;
-  const MEETING_INTERVAL_MS = 2_000;
-  const MEETING_DURATION_MS = 5 * 60_000;
+  const UPDATE_INTERVAL_MS = 5_000;
 
-  const shareToggleBtn = document.getElementById("shareToggleBtn");
-  const meetingBtn = document.getElementById("meetingBtn");
   const myStatusEl = document.getElementById("myStatusBadge");
-  const currentIntervalEl = document.getElementById("currentInterval");
-  const meetingRemainEl = document.getElementById("meetingRemain");
-  const meetingByEl = document.getElementById("meetingBy");
-  const meetingMeterEl = document.getElementById("meetingMeter");
   const distanceListEl = document.getElementById("distanceList");
   const myLocationBtn = document.getElementById("myLocationBtn");
-  const fitAllBtn = document.getElementById("fitAllBtn");
   const hideMyMarkerBtn = document.getElementById("hideMyMarkerBtn");
-  const presetSaveBtn = document.getElementById("presetSaveBtn");
-  const presetFocusBtn = document.getElementById("presetFocusBtn");
-  const autoPauseOnLeaveToggle = document.getElementById("autoPauseOnLeaveToggle");
   const shareStateBannerEl = document.getElementById("shareStateBanner");
   const loadingSkeletonEl = document.getElementById("loadingSkeleton");
   const distancePanelEl = document.getElementById("distancePanel");
@@ -33,26 +20,15 @@
   let map;
   let markers = new Map();
   let positionsRef = null;
-  let modeRef = null;
   let shareEnabled = false;
   let intervalHandle = null;
-  let meetingTickHandle = null;
   let latestPeople = {};
-  let selectedPreset = "save";
   let hideMyMarker = false;
-  let autoPauseOnLeave = true;
   let wasSharingBeforeHidden = false;
-  let prevMeetingActive = false;
   let toastTimer = null;
   let isDraggingSheet = false;
   let dragStartY = 0;
   let initialPanelCollapsed = true;
-  let currentMode = {
-    isMeeting: false,
-    startedAt: 0,
-    endsAt: 0,
-    triggeredBy: ""
-  };
 
   async function init() {
     validateConfig();
@@ -113,43 +89,16 @@
   }
 
   function bindEvents() {
-    shareToggleBtn.addEventListener("click", toggleSharing);
-    meetingBtn.addEventListener("click", triggerMeetingMode);
-    presetSaveBtn.addEventListener("click", () => setPowerPreset("save"));
-    presetFocusBtn.addEventListener("click", () => setPowerPreset("focus"));
     myLocationBtn.addEventListener("click", moveToMyLocation);
-    fitAllBtn.addEventListener("click", fitAllMarkers);
     hideMyMarkerBtn.addEventListener("click", toggleHideMyMarker);
     sheetHandleEl.addEventListener("click", toggleDistancePanel);
     distancePanelEl.addEventListener("pointerdown", onSheetPointerDown);
     distancePanelEl.addEventListener("pointerup", onSheetPointerUp);
-    autoPauseOnLeaveToggle.addEventListener("change", () => {
-      autoPauseOnLeave = autoPauseOnLeaveToggle.checked;
-    });
     document.addEventListener("visibilitychange", handleVisibilityChange);
   }
 
   async function joinPublicRoom() {
     positionsRef = db.ref(`rooms/${PUBLIC_ROOM_ID}/positions`);
-    modeRef = db.ref(`rooms/${PUBLIC_ROOM_ID}/mode`);
-
-    modeRef.on("value", (snapshot) => {
-      const mode = snapshot.val();
-      if (!mode) {
-        currentMode = { isMeeting: false, startedAt: 0, endsAt: 0, triggeredBy: "" };
-      } else {
-        currentMode = mode;
-      }
-      updateModeUI();
-      resetUpdateLoop();
-    });
-
-    positionsRef.on("value", (snapshot) => {
-      const people = snapshot.val() || {};
-      latestPeople = people;
-      renderPeople(people);
-      renderDistances(people);
-    });
 
     await db.ref(`rooms/${PUBLIC_ROOM_ID}/members/${userId}`).set({
       nickname,
@@ -159,109 +108,31 @@
     db.ref(`rooms/${PUBLIC_ROOM_ID}/members/${userId}`).onDisconnect().remove();
     db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).onDisconnect().remove();
 
+    positionsRef.on("value", (snapshot) => {
+      const people = snapshot.val() || {};
+      latestPeople = people;
+      renderPeople(people);
+      renderDistances(people);
+    }, (error) => {
+      updateStatus(`위치 동기화 실패: ${error.message}`, "error");
+    });
+
     shareEnabled = true;
-    shareToggleBtn.textContent = "위치 공유 중지";
-    refreshPresetButtons();
     updateShareStateBanner();
-  }
-
-  async function toggleSharing() {
-    shareEnabled = !shareEnabled;
-    shareToggleBtn.textContent = shareEnabled ? "위치 공유 중지" : "위치 공유 시작";
-    if (shareEnabled) {
-      updateStatus("위치 공유 활성화");
-      if (!hideMyMarker) {
-        await pushCurrentLocation();
-      }
-      resetUpdateLoop();
-    } else {
-      updateStatus("위치 공유 비활성화");
-      clearInterval(intervalHandle);
-      intervalHandle = null;
-      await db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
-    }
-    updateShareStateBanner();
-  }
-
-  async function triggerMeetingMode() {
-    if (!modeRef) {
-      return;
-    }
-    const now = Date.now();
-    const nextMode = {
-      isMeeting: true,
-      startedAt: now,
-      endsAt: now + MEETING_DURATION_MS,
-      triggeredBy: nickname || userId
-    };
-    await modeRef.set(nextMode);
-    updateStatus(`모임 모드 시작: 요청자 ${nextMode.triggeredBy}`);
   }
 
   function resetUpdateLoop() {
     clearInterval(intervalHandle);
     intervalHandle = null;
     if (!shareEnabled || !positionsRef) {
-      currentIntervalEl.textContent = "-";
       return;
     }
-    const interval = isMeetingActive() ? MEETING_INTERVAL_MS : getPresetIntervalMs();
-    currentIntervalEl.textContent = `${interval / 1000}초`;
+    const interval = UPDATE_INTERVAL_MS;
     intervalHandle = setInterval(() => {
       pushCurrentLocation().catch((err) => {
         updateStatus(`위치 업데이트 실패: ${err.message}`);
       });
     }, interval);
-  }
-
-  function isMeetingActive() {
-    return Boolean(currentMode.isMeeting && currentMode.endsAt && currentMode.endsAt > Date.now());
-  }
-
-  function updateModeUI() {
-    clearInterval(meetingTickHandle);
-    meetingTickHandle = null;
-
-    const active = isMeetingActive();
-    if (!active) {
-      meetingRemainEl.textContent = "없음";
-      meetingByEl.textContent = "-";
-      meetingMeterEl.style.setProperty("--progress", "0");
-      if (prevMeetingActive) {
-        showToast("모임 모드가 종료되었습니다.");
-        triggerHaptic();
-      }
-      prevMeetingActive = false;
-      if (currentMode.isMeeting && currentMode.endsAt <= Date.now() && modeRef) {
-        modeRef.set({
-          isMeeting: false,
-          startedAt: currentMode.startedAt || 0,
-          endsAt: currentMode.endsAt || 0,
-          triggeredBy: currentMode.triggeredBy || ""
-        });
-      }
-      return;
-    }
-
-    if (!prevMeetingActive) {
-      showToast(`모임 모드 시작 · ${currentMode.triggeredBy || "-"}`);
-      triggerHaptic();
-    }
-    prevMeetingActive = true;
-
-    meetingTickHandle = setInterval(() => {
-      const remainMs = Math.max(0, currentMode.endsAt - Date.now());
-      const remainSec = Math.floor(remainMs / 1000);
-      meetingRemainEl.textContent = `${remainSec}초`;
-      meetingByEl.textContent = currentMode.triggeredBy || "-";
-      const progress = Math.max(0, Math.min(100, (remainMs / MEETING_DURATION_MS) * 100));
-      meetingMeterEl.style.setProperty("--progress", String(progress));
-      if (remainMs <= 0) {
-        clearInterval(meetingTickHandle);
-        meetingTickHandle = null;
-        prevMeetingActive = false;
-      }
-    }, 500);
   }
 
   async function pushCurrentLocation() {
@@ -386,28 +257,6 @@
     }
   }
 
-  function fitAllMarkers() {
-    if (!map || markers.size === 0) {
-      return;
-    }
-    const bounds = new kakao.maps.LatLngBounds();
-    for (const markerPack of markers.values()) {
-      bounds.extend(markerPack.marker.getPosition());
-    }
-    map.setBounds(bounds);
-  }
-
-  function setPowerPreset(preset) {
-    selectedPreset = preset;
-    refreshPresetButtons();
-    resetUpdateLoop();
-    if (preset === "focus") {
-      updateStatus("집중 모드: 10초 주기", "success");
-      return;
-    }
-    updateStatus("절전 모드: 60초 주기", "neutral");
-  }
-
   async function toggleHideMyMarker() {
     hideMyMarker = !hideMyMarker;
     hideMyMarkerBtn.textContent = hideMyMarker ? "내 마커 보이기" : "내 마커 숨기기";
@@ -425,15 +274,6 @@
       updateStatus("내 마커 다시 표시", "success");
     }
     updateShareStateBanner();
-  }
-
-  function refreshPresetButtons() {
-    presetSaveBtn.classList.toggle("preset-active", selectedPreset === "save");
-    presetFocusBtn.classList.toggle("preset-active", selectedPreset === "focus");
-  }
-
-  function getPresetIntervalMs() {
-    return selectedPreset === "focus" ? FOCUS_INTERVAL_MS : DEFAULT_INTERVAL_MS;
   }
 
   function animateMarkerTo(marker, targetLatLng, durationMs) {
@@ -484,23 +324,6 @@
     isDraggingSheet = false;
   }
 
-  function showToast(message) {
-    if (!toastEl) {
-      return;
-    }
-    toastEl.textContent = message;
-    toastEl.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toastEl.classList.remove("show");
-    }, 1700);
-  }
-
-  function triggerHaptic() {
-    if (navigator.vibrate) {
-      navigator.vibrate(120);
-    }
-  }
 
   function hideSkeleton() {
     if (loadingSkeletonEl) {
@@ -580,19 +403,23 @@
 
   function handleVisibilityChange() {
     if (document.hidden && shareEnabled) {
-      if (autoPauseOnLeave) {
-        wasSharingBeforeHidden = true;
-        toggleSharing();
-      } else {
-        updateStatus("탭 비활성화: 위치 전송 일시중지");
-        clearInterval(intervalHandle);
-        intervalHandle = null;
-        updateShareStateBanner();
-      }
+      wasSharingBeforeHidden = true;
+      shareEnabled = false;
+      clearInterval(intervalHandle);
+      intervalHandle = null;
+      db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
+      updateStatus("탭 비활성화: 위치 공유 중지", "offline");
+      updateShareStateBanner();
     } else if (!document.hidden) {
-      if (autoPauseOnLeave && wasSharingBeforeHidden) {
+      if (wasSharingBeforeHidden) {
         wasSharingBeforeHidden = false;
-        toggleSharing();
+        shareEnabled = true;
+        if (!hideMyMarker) {
+          pushCurrentLocation().catch(() => {});
+        }
+        resetUpdateLoop();
+        updateStatus("탭 활성화: 위치 공유 재개", "success");
+        updateShareStateBanner();
       } else if (shareEnabled) {
         updateStatus("탭 활성화: 위치 전송 재개");
         resetUpdateLoop();
@@ -603,6 +430,9 @@
   }
 
   function updateStatus(message, status = "neutral") {
+    if (!myStatusEl) {
+      return;
+    }
     myStatusEl.textContent = message;
     myStatusEl.className = `badge ${getStatusBadgeClass(status, message)}`;
   }

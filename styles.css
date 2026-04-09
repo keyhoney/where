@@ -301,7 +301,7 @@ button:disabled {
   bottom: var(--space-2);
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-1);
 }
 
@@ -327,22 +327,6 @@ button:disabled {
   transform: translateX(-50%) translateY(0);
 }
 
-.leave-toggle {
-  position: absolute;
-  left: var(--space-2);
-  bottom: 120px;
-  z-index: 4;
-  background: rgba(17, 24, 39, 0.8);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  padding: var(--space-1);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-caption);
-}
-
 .bottom-floating-bar button {
   padding: 10px var(--space-1);
   font-size: var(--font-size-body);
@@ -350,16 +334,6 @@ button:disabled {
 
 button.secondary {
   background: var(--color-neutral-900);
-}
-
-button.cta {
-  background: #ea580c;
-  font-weight: var(--font-weight-title);
-}
-
-button.preset-active {
-  outline: 2px solid #93c5fd;
-  background: #1d4ed8;
 }
 
 @media (max-width: 640px) {

@@ -17,18 +17,7 @@
       </div>
 
       <div class="top-overlay">
-        <h1>제주 모임 트래커</h1>
-        <div class="permission-tip">위치 권한을 허용해야 서로 위치를 확인할 수 있습니다.</div>
         <div class="share-state-banner" id="shareStateBanner">현재 공유 중</div>
-        <div class="badge-row">
-          <span class="badge badge-neutral" id="myStatusBadge">대기 중</span>
-          <span class="badge badge-info">주기: <span id="currentInterval">-</span></span>
-          <span class="badge badge-warn">모임 요청자: <span id="meetingBy">-</span></span>
-        </div>
-        <div class="meeting-meter-wrap">
-          <div class="meeting-meter" id="meetingMeter"></div>
-          <div class="meeting-meter-text" id="meetingRemain">-</div>
-        </div>
       </div>
 
       <div class="distance-panel collapsed" id="distancePanel">
@@ -40,18 +29,9 @@
       </div>
 
       <div class="bottom-floating-bar">
-        <button id="shareToggleBtn">위치 공유 중지</button>
         <button id="hideMyMarkerBtn" class="secondary">내 마커 숨기기</button>
-        <button id="meetingBtn" class="cta">지금 모이기 (5분)</button>
-        <button id="presetSaveBtn" class="secondary">절전 60초</button>
-        <button id="presetFocusBtn" class="secondary">집중 10초</button>
         <button id="myLocationBtn" class="secondary">내 위치</button>
-        <button id="fitAllBtn" class="secondary">전체 보기</button>
       </div>
-      <label class="leave-toggle">
-        <input type="checkbox" id="autoPauseOnLeaveToggle" checked />
-        <span>앱 이탈 시 자동 공유 중지</span>
-      </label>
       <div class="toast" id="toast"></div>
     </section>
   </div>
