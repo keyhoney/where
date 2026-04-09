@@ -32,7 +32,7 @@
     await loadKakaoMapSDK(window.APP_CONFIG.kakaoAppKey);
     initFirebase();
     await signIn();
-    nickname = `게스트-${userId.slice(0, 6)}`;
+    nickname = userId.slice(0, 6);
     setupMap();
     bindEvents();
     await joinPublicRoom();
