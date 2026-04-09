@@ -9,6 +9,10 @@
   const distanceModalOpenBtn = document.getElementById("distanceModalOpenBtn");
   const distanceModalCloseBtn = document.getElementById("distanceModalCloseBtn");
   const distanceModalBackdrop = document.getElementById("distanceModalBackdrop");
+  const aboutModalEl = document.getElementById("aboutModal");
+  const aboutModalOpenBtn = document.getElementById("aboutModalOpenBtn");
+  const aboutModalCloseBtn = document.getElementById("aboutModalCloseBtn");
+  const aboutModalBackdrop = document.getElementById("aboutModalBackdrop");
 
   let app;
   let db;
@@ -85,6 +89,9 @@
     distanceModalOpenBtn.addEventListener("click", openDistanceModal);
     distanceModalCloseBtn.addEventListener("click", closeDistanceModal);
     distanceModalBackdrop.addEventListener("click", closeDistanceModal);
+    aboutModalOpenBtn.addEventListener("click", openAboutModal);
+    aboutModalCloseBtn.addEventListener("click", closeAboutModal);
+    aboutModalBackdrop.addEventListener("click", closeAboutModal);
     document.addEventListener("visibilitychange", handleVisibilityChange);
   }
 
@@ -258,6 +265,14 @@
 
   function closeDistanceModal() {
     distanceModalEl.classList.add("hidden");
+  }
+
+  function openAboutModal() {
+    aboutModalEl.classList.remove("hidden");
+  }
+
+  function closeAboutModal() {
+    aboutModalEl.classList.add("hidden");
   }
 
 

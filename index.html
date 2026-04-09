@@ -16,7 +16,8 @@
         <div class="sk-line shimmer short"></div>
       </div>
 
-      <button id="distanceModalOpenBtn" class="distance-open-btn">가까운 순 거리 보기</button>
+      <button id="aboutModalOpenBtn" class="distance-open-btn about-open-btn">어디계세요?</button>
+      <button id="distanceModalOpenBtn" class="distance-open-btn">다른 사람 상태 보기</button>
 
       <div class="distance-modal hidden" id="distanceModal">
         <div class="distance-modal-backdrop" id="distanceModalBackdrop"></div>
@@ -27,6 +28,22 @@
           </div>
           <div id="distanceList" class="distance-cards">
             <div class="distance-card empty">위치 수집 후 다른 사용자와의 거리가 표시됩니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="distance-modal hidden" id="aboutModal">
+        <div class="distance-modal-backdrop" id="aboutModalBackdrop"></div>
+        <div class="distance-modal-content about-modal-content">
+          <div class="distance-modal-head">
+            <strong>만든이 정보</strong>
+            <button id="aboutModalCloseBtn" class="distance-close-btn" type="button">닫기</button>
+          </div>
+          <div class="distance-cards">
+            <div class="distance-card">
+              <div class="name">만든이 : Keyhoney</div>
+              <div class="meta">배포일 : 2026.04.10.</div>
+            </div>
           </div>
         </div>
       </div>

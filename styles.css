@@ -162,8 +162,14 @@ button:disabled {
 .distance-open-btn {
   position: absolute;
   right: var(--space-2);
-  bottom: var(--space-2);
+  top: var(--space-2);
   z-index: 3;
+}
+
+.about-open-btn {
+  left: var(--space-2);
+  right: auto;
+  background: #7c3aed;
 }
 
 .distance-modal {
@@ -193,6 +199,10 @@ button:disabled {
   padding: var(--space-2);
   max-height: 52vh;
   overflow-y: auto;
+}
+
+.about-modal-content {
+  max-width: 420px;
 }
 
 .distance-modal-head {
