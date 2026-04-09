@@ -32,7 +32,7 @@
 2. JavaScript 키 발급
 3. Web 플랫폼 도메인 등록 (로컬 테스트 포함)
 
-## 3) config.js 입력
+## 3) 로컬용 config.js 입력
 
 `config.example.js`를 복사해 `config.js`를 만든 뒤 실제 값으로 교체하세요.
 
@@ -42,7 +42,24 @@ PowerShell 예시:
 Copy-Item .\config.example.js .\config.js
 ```
 
-## 4) 실행
+## 4) Vercel 환경 변수 배포
+
+Vercel에서는 `config.js`를 직접 커밋하지 않고, 빌드 시 자동 생성합니다.
+
+프로젝트 Environment Variables에 아래 키를 추가하세요.
+
+- `KAKAO_APP_KEY`
+- `FIREBASE_API_KEY`
+- `FIREBASE_AUTH_DOMAIN`
+- `FIREBASE_DATABASE_URL`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_STORAGE_BUCKET`
+- `FIREBASE_MESSAGING_SENDER_ID`
+- `FIREBASE_APP_ID`
+
+이 프로젝트는 배포 시 `npm run build`를 실행해 위 변수로 `config.js`를 생성합니다.
+
+## 5) 실행
 
 정적 파일 서버로 실행해야 위치 권한을 안정적으로 받을 수 있습니다.
 
