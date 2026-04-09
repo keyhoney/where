@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()",
+        "members": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['nickname', 'joinedAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length <= 20"
+          }
+        },
+        "positions": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()",
+            ".validate": "newData.hasChildren(['nickname', 'lat', 'lng', 'updatedAt']) && newData.child('nickname').isString() && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180"
+          }
+        },
+        "mode": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()",
+          ".validate": "newData.hasChildren(['isMeeting', 'startedAt', 'endsAt', 'triggeredBy']) && newData.child('isMeeting').isBoolean() && newData.child('startedAt').isNumber() && newData.child('endsAt').isNumber() && newData.child('triggeredBy').isString() && newData.child('triggeredBy').val().length <= 20 && ((!newData.child('isMeeting').val() && newData.child('endsAt').val() >= newData.child('startedAt').val()) || (newData.child('isMeeting').val() && newData.child('endsAt').val() <= newData.child('startedAt').val() + 300000 && newData.child('endsAt').val() >= newData.child('startedAt').val()))"
+        }
+      }
+    }
+  }
+}

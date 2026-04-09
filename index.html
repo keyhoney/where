@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jeju Meet Tracker</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>제주 모임 트래커</h1>
+      <p>기본 60초 업데이트 / 모임 모드 2초 (5분)</p>
+    </header>
+
+    <section class="controls">
+      <div class="btn-row">
+        <button id="shareToggleBtn">위치 공유 중지</button>
+        <button id="meetingBtn">모임 모드 5분 시작</button>
+      </div>
+      <div class="status">
+        <div>내 상태: <span id="myStatus">대기 중</span></div>
+        <div>현재 주기: <span id="currentInterval">-</span></div>
+        <div>모임 모드 남은 시간: <span id="meetingRemain">-</span></div>
+      </div>
+      <div class="distance-box">
+        <strong>거리 정보</strong>
+        <ul id="distanceList">
+          <li>위치 수집 후 다른 사용자와의 거리가 표시됩니다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="map-wrap">
+      <div id="map"></div>
+    </section>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
