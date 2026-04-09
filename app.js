@@ -1,6 +1,7 @@
 (() => {
   const PUBLIC_ROOM_ID = "public-live-map";
-  const UPDATE_INTERVAL_MS = 5_000;
+  const UPDATE_INTERVAL_MS = 2_000;
+  const MIN_MOVE_METERS_TO_UPLOAD = 8;
 
   const myStatusEl = document.getElementById("myStatusBadge");
   const distanceListEl = document.getElementById("distanceList");
@@ -26,6 +27,8 @@
   let intervalHandle = null;
   let latestPeople = {};
   let wasSharingBeforeHidden = false;
+  let lastUploadedLat = null;
+  let lastUploadedLng = null;
 
   async function init() {
     validateConfig();
@@ -137,13 +140,26 @@
       return;
     }
     const pos = await getCurrentPosition();
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+
+    if (
+      lastUploadedLat !== null
+      && lastUploadedLng !== null
+      && calcDistanceMeters(lastUploadedLat, lastUploadedLng, lat, lng) < MIN_MOVE_METERS_TO_UPLOAD
+    ) {
+      return;
+    }
+
     await db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).set({
       nickname,
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
+      lat,
+      lng,
       accuracy: pos.coords.accuracy ?? null,
       updatedAt: firebase.database.ServerValue.TIMESTAMP
     });
+    lastUploadedLat = lat;
+    lastUploadedLng = lng;
   }
 
   function getCurrentPosition() {
