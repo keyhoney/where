@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jeju Meet Tracker</title>
+  <title>Where-J5</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -16,23 +16,21 @@
         <div class="sk-line shimmer short"></div>
       </div>
 
-      <div class="top-overlay">
-        <div class="share-state-banner" id="shareStateBanner">현재 공유 중</div>
-      </div>
+      <button id="distanceModalOpenBtn" class="distance-open-btn">가까운 순 거리 보기</button>
 
-      <div class="distance-panel collapsed" id="distancePanel">
-        <div class="sheet-handle" id="sheetHandle"></div>
-        <strong>가까운 순 거리</strong>
-        <div id="distanceList" class="distance-cards">
-          <div class="distance-card empty">위치 수집 후 다른 사용자와의 거리가 표시됩니다.</div>
+      <div class="distance-modal hidden" id="distanceModal">
+        <div class="distance-modal-backdrop" id="distanceModalBackdrop"></div>
+        <div class="distance-modal-content">
+          <div class="distance-modal-head">
+            <strong>가까운 순 거리</strong>
+            <button id="distanceModalCloseBtn" class="distance-close-btn" type="button">닫기</button>
+          </div>
+          <div id="distanceList" class="distance-cards">
+            <div class="distance-card empty">위치 수집 후 다른 사용자와의 거리가 표시됩니다.</div>
+          </div>
         </div>
       </div>
 
-      <div class="bottom-floating-bar">
-        <button id="hideMyMarkerBtn" class="secondary">내 마커 숨기기</button>
-        <button id="myLocationBtn" class="secondary">내 위치</button>
-      </div>
-      <div class="toast" id="toast"></div>
     </section>
   </div>
 

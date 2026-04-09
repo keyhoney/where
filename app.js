@@ -4,13 +4,11 @@
 
   const myStatusEl = document.getElementById("myStatusBadge");
   const distanceListEl = document.getElementById("distanceList");
-  const myLocationBtn = document.getElementById("myLocationBtn");
-  const hideMyMarkerBtn = document.getElementById("hideMyMarkerBtn");
-  const shareStateBannerEl = document.getElementById("shareStateBanner");
   const loadingSkeletonEl = document.getElementById("loadingSkeleton");
-  const distancePanelEl = document.getElementById("distancePanel");
-  const sheetHandleEl = document.getElementById("sheetHandle");
-  const toastEl = document.getElementById("toast");
+  const distanceModalEl = document.getElementById("distanceModal");
+  const distanceModalOpenBtn = document.getElementById("distanceModalOpenBtn");
+  const distanceModalCloseBtn = document.getElementById("distanceModalCloseBtn");
+  const distanceModalBackdrop = document.getElementById("distanceModalBackdrop");
 
   let app;
   let db;
@@ -23,12 +21,7 @@
   let shareEnabled = false;
   let intervalHandle = null;
   let latestPeople = {};
-  let hideMyMarker = false;
   let wasSharingBeforeHidden = false;
-  let toastTimer = null;
-  let isDraggingSheet = false;
-  let dragStartY = 0;
-  let initialPanelCollapsed = true;
 
   async function init() {
     validateConfig();
@@ -89,11 +82,9 @@
   }
 
   function bindEvents() {
-    myLocationBtn.addEventListener("click", moveToMyLocation);
-    hideMyMarkerBtn.addEventListener("click", toggleHideMyMarker);
-    sheetHandleEl.addEventListener("click", toggleDistancePanel);
-    distancePanelEl.addEventListener("pointerdown", onSheetPointerDown);
-    distancePanelEl.addEventListener("pointerup", onSheetPointerUp);
+    distanceModalOpenBtn.addEventListener("click", openDistanceModal);
+    distanceModalCloseBtn.addEventListener("click", closeDistanceModal);
+    distanceModalBackdrop.addEventListener("click", closeDistanceModal);
     document.addEventListener("visibilitychange", handleVisibilityChange);
   }
 
@@ -118,7 +109,6 @@
     });
 
     shareEnabled = true;
-    updateShareStateBanner();
   }
 
   function resetUpdateLoop() {
@@ -136,7 +126,7 @@
   }
 
   async function pushCurrentLocation() {
-    if (!positionsRef || hideMyMarker) {
+    if (!positionsRef) {
       return;
     }
     const pos = await getCurrentPosition();
@@ -147,9 +137,6 @@
       accuracy: pos.coords.accuracy ?? null,
       updatedAt: firebase.database.ServerValue.TIMESTAMP
     });
-    if (map) {
-      map.panTo(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
-    }
   }
 
   function getCurrentPosition() {
@@ -244,38 +231,6 @@
     }).join("");
   }
 
-  async function moveToMyLocation() {
-    if (!shareEnabled) {
-      updateStatus("위치 공유가 꺼져 있습니다.", "offline");
-      return;
-    }
-    try {
-      const pos = await getCurrentPosition();
-      map.panTo(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
-    } catch (err) {
-      updateStatus(`내 위치 이동 실패: ${err.message}`, "error");
-    }
-  }
-
-  async function toggleHideMyMarker() {
-    hideMyMarker = !hideMyMarker;
-    hideMyMarkerBtn.textContent = hideMyMarker ? "내 마커 보이기" : "내 마커 숨기기";
-    if (hideMyMarker) {
-      await db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
-      if (markers.has(userId)) {
-        const me = markers.get(userId);
-        me.info.close();
-        me.marker.setMap(null);
-        markers.delete(userId);
-      }
-      updateStatus("내 마커 임시 숨김", "offline");
-    } else if (shareEnabled) {
-      await pushCurrentLocation();
-      updateStatus("내 마커 다시 표시", "success");
-    }
-    updateShareStateBanner();
-  }
-
   function animateMarkerTo(marker, targetLatLng, durationMs) {
     const start = marker.getPosition();
     const sLat = start.getLat();
@@ -297,31 +252,12 @@
     requestAnimationFrame(step);
   }
 
-  function toggleDistancePanel() {
-    distancePanelEl.classList.toggle("collapsed");
+  function openDistanceModal() {
+    distanceModalEl.classList.remove("hidden");
   }
 
-  function onSheetPointerDown(event) {
-    isDraggingSheet = true;
-    dragStartY = event.clientY;
-    initialPanelCollapsed = distancePanelEl.classList.contains("collapsed");
-  }
-
-  function onSheetPointerUp(event) {
-    if (!isDraggingSheet) {
-      return;
-    }
-    const deltaY = event.clientY - dragStartY;
-    if (Math.abs(deltaY) < 24) {
-      isDraggingSheet = false;
-      return;
-    }
-    if (deltaY < 0) {
-      distancePanelEl.classList.remove("collapsed");
-    } else if (!initialPanelCollapsed) {
-      distancePanelEl.classList.add("collapsed");
-    }
-    isDraggingSheet = false;
+  function closeDistanceModal() {
+    distanceModalEl.classList.add("hidden");
   }
 
 
@@ -409,22 +345,17 @@
       intervalHandle = null;
       db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
       updateStatus("탭 비활성화: 위치 공유 중지", "offline");
-      updateShareStateBanner();
     } else if (!document.hidden) {
       if (wasSharingBeforeHidden) {
         wasSharingBeforeHidden = false;
         shareEnabled = true;
-        if (!hideMyMarker) {
-          pushCurrentLocation().catch(() => {});
-        }
+        pushCurrentLocation().catch(() => {});
         resetUpdateLoop();
         updateStatus("탭 활성화: 위치 공유 재개", "success");
-        updateShareStateBanner();
       } else if (shareEnabled) {
         updateStatus("탭 활성화: 위치 전송 재개");
         resetUpdateLoop();
         renderDistances(latestPeople);
-        updateShareStateBanner();
       }
     }
   }
@@ -451,24 +382,6 @@
       return "badge-success";
     }
     return "badge-neutral";
-  }
-
-  function updateShareStateBanner() {
-    if (!shareStateBannerEl) {
-      return;
-    }
-    if (!shareEnabled) {
-      shareStateBannerEl.textContent = "공유 일시중지";
-      shareStateBannerEl.classList.add("paused");
-      return;
-    }
-    if (hideMyMarker) {
-      shareStateBannerEl.textContent = "공유 중 (내 마커 숨김)";
-      shareStateBannerEl.classList.remove("paused");
-      return;
-    }
-    shareStateBannerEl.textContent = "현재 공유 중";
-    shareStateBannerEl.classList.remove("paused");
   }
 
   init().catch((err) => {
