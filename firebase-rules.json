@@ -17,7 +17,7 @@
         },
         "mode": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()",
-          ".validate": "newData.hasChildren(['isMeeting', 'startedAt', 'endsAt', 'triggeredBy']) && newData.child('isMeeting').isBoolean() && newData.child('startedAt').isNumber() && newData.child('endsAt').isNumber() && newData.child('triggeredBy').isString() && newData.child('triggeredBy').val().length <= 20 && ((!newData.child('isMeeting').val() && newData.child('endsAt').val() >= newData.child('startedAt').val()) || (newData.child('isMeeting').val() && newData.child('endsAt').val() <= newData.child('startedAt').val() + 300000 && newData.child('endsAt').val() >= newData.child('startedAt').val()))"
+          ".validate": "newData.hasChildren(['isMeeting', 'startedAt', 'endsAt', 'triggeredBy']) && newData.child('isMeeting').isBoolean() && newData.child('startedAt').isNumber() && newData.child('endsAt').isNumber() && newData.child('triggeredBy').isString() && newData.child('triggeredBy').val().length <= 20 && ((newData.child('isMeeting').val() == false && newData.child('endsAt').val() >= newData.child('startedAt').val()) || (newData.child('isMeeting').val() == true && newData.child('endsAt').val() <= newData.child('startedAt').val() + 300000 && newData.child('endsAt').val() >= newData.child('startedAt').val()))"
         }
       }
     }

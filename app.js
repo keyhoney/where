@@ -1,15 +1,29 @@
 (() => {
   const PUBLIC_ROOM_ID = "public-live-map";
   const DEFAULT_INTERVAL_MS = 60_000;
+  const FOCUS_INTERVAL_MS = 10_000;
   const MEETING_INTERVAL_MS = 2_000;
   const MEETING_DURATION_MS = 5 * 60_000;
 
   const shareToggleBtn = document.getElementById("shareToggleBtn");
   const meetingBtn = document.getElementById("meetingBtn");
-  const myStatusEl = document.getElementById("myStatus");
+  const myStatusEl = document.getElementById("myStatusBadge");
   const currentIntervalEl = document.getElementById("currentInterval");
   const meetingRemainEl = document.getElementById("meetingRemain");
+  const meetingByEl = document.getElementById("meetingBy");
+  const meetingMeterEl = document.getElementById("meetingMeter");
   const distanceListEl = document.getElementById("distanceList");
+  const myLocationBtn = document.getElementById("myLocationBtn");
+  const fitAllBtn = document.getElementById("fitAllBtn");
+  const hideMyMarkerBtn = document.getElementById("hideMyMarkerBtn");
+  const presetSaveBtn = document.getElementById("presetSaveBtn");
+  const presetFocusBtn = document.getElementById("presetFocusBtn");
+  const autoPauseOnLeaveToggle = document.getElementById("autoPauseOnLeaveToggle");
+  const shareStateBannerEl = document.getElementById("shareStateBanner");
+  const loadingSkeletonEl = document.getElementById("loadingSkeleton");
+  const distancePanelEl = document.getElementById("distancePanel");
+  const sheetHandleEl = document.getElementById("sheetHandle");
+  const toastEl = document.getElementById("toast");
 
   let app;
   let db;
@@ -24,6 +38,15 @@
   let intervalHandle = null;
   let meetingTickHandle = null;
   let latestPeople = {};
+  let selectedPreset = "save";
+  let hideMyMarker = false;
+  let autoPauseOnLeave = true;
+  let wasSharingBeforeHidden = false;
+  let prevMeetingActive = false;
+  let toastTimer = null;
+  let isDraggingSheet = false;
+  let dragStartY = 0;
+  let initialPanelCollapsed = true;
   let currentMode = {
     isMeeting: false,
     startedAt: 0,
@@ -43,6 +66,7 @@
     await pushCurrentLocation();
     resetUpdateLoop();
     updateStatus("공개 지도에 자동 연결됨");
+    hideSkeleton();
   }
 
   function validateConfig() {
@@ -91,6 +115,17 @@
   function bindEvents() {
     shareToggleBtn.addEventListener("click", toggleSharing);
     meetingBtn.addEventListener("click", triggerMeetingMode);
+    presetSaveBtn.addEventListener("click", () => setPowerPreset("save"));
+    presetFocusBtn.addEventListener("click", () => setPowerPreset("focus"));
+    myLocationBtn.addEventListener("click", moveToMyLocation);
+    fitAllBtn.addEventListener("click", fitAllMarkers);
+    hideMyMarkerBtn.addEventListener("click", toggleHideMyMarker);
+    sheetHandleEl.addEventListener("click", toggleDistancePanel);
+    distancePanelEl.addEventListener("pointerdown", onSheetPointerDown);
+    distancePanelEl.addEventListener("pointerup", onSheetPointerUp);
+    autoPauseOnLeaveToggle.addEventListener("change", () => {
+      autoPauseOnLeave = autoPauseOnLeaveToggle.checked;
+    });
     document.addEventListener("visibilitychange", handleVisibilityChange);
   }
 
@@ -126,6 +161,8 @@
 
     shareEnabled = true;
     shareToggleBtn.textContent = "위치 공유 중지";
+    refreshPresetButtons();
+    updateShareStateBanner();
   }
 
   async function toggleSharing() {
@@ -133,7 +170,9 @@
     shareToggleBtn.textContent = shareEnabled ? "위치 공유 중지" : "위치 공유 시작";
     if (shareEnabled) {
       updateStatus("위치 공유 활성화");
-      await pushCurrentLocation();
+      if (!hideMyMarker) {
+        await pushCurrentLocation();
+      }
       resetUpdateLoop();
     } else {
       updateStatus("위치 공유 비활성화");
@@ -141,6 +180,7 @@
       intervalHandle = null;
       await db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
     }
+    updateShareStateBanner();
   }
 
   async function triggerMeetingMode() {
@@ -165,7 +205,7 @@
       currentIntervalEl.textContent = "-";
       return;
     }
-    const interval = isMeetingActive() ? MEETING_INTERVAL_MS : DEFAULT_INTERVAL_MS;
+    const interval = isMeetingActive() ? MEETING_INTERVAL_MS : getPresetIntervalMs();
     currentIntervalEl.textContent = `${interval / 1000}초`;
     intervalHandle = setInterval(() => {
       pushCurrentLocation().catch((err) => {
@@ -182,8 +222,16 @@
     clearInterval(meetingTickHandle);
     meetingTickHandle = null;
 
-    if (!isMeetingActive()) {
+    const active = isMeetingActive();
+    if (!active) {
       meetingRemainEl.textContent = "없음";
+      meetingByEl.textContent = "-";
+      meetingMeterEl.style.setProperty("--progress", "0");
+      if (prevMeetingActive) {
+        showToast("모임 모드가 종료되었습니다.");
+        triggerHaptic();
+      }
+      prevMeetingActive = false;
       if (currentMode.isMeeting && currentMode.endsAt <= Date.now() && modeRef) {
         modeRef.set({
           isMeeting: false,
@@ -195,19 +243,29 @@
       return;
     }
 
+    if (!prevMeetingActive) {
+      showToast(`모임 모드 시작 · ${currentMode.triggeredBy || "-"}`);
+      triggerHaptic();
+    }
+    prevMeetingActive = true;
+
     meetingTickHandle = setInterval(() => {
       const remainMs = Math.max(0, currentMode.endsAt - Date.now());
       const remainSec = Math.floor(remainMs / 1000);
       meetingRemainEl.textContent = `${remainSec}초`;
+      meetingByEl.textContent = currentMode.triggeredBy || "-";
+      const progress = Math.max(0, Math.min(100, (remainMs / MEETING_DURATION_MS) * 100));
+      meetingMeterEl.style.setProperty("--progress", String(progress));
       if (remainMs <= 0) {
         clearInterval(meetingTickHandle);
         meetingTickHandle = null;
+        prevMeetingActive = false;
       }
     }, 500);
   }
 
   async function pushCurrentLocation() {
-    if (!positionsRef) {
+    if (!positionsRef || hideMyMarker) {
       return;
     }
     const pos = await getCurrentPosition();
@@ -253,8 +311,12 @@
         info.open(map, marker);
         markers.set(id, { marker, info });
       } else {
-        markers.get(id).marker.setPosition(latlng);
+        animateMarkerTo(markers.get(id).marker, latlng, 350);
       }
+
+      const ageSec = getAgeSeconds(item.updatedAt);
+      const opacity = ageSec > 180 ? 0.45 : ageSec > 60 ? 0.7 : 1;
+      markers.get(id).marker.setOpacity(opacity);
     }
 
     for (const [id, markerPack] of markers.entries()) {
@@ -272,7 +334,7 @@
     }
     const me = people[userId];
     if (!me || typeof me.lat !== "number" || typeof me.lng !== "number") {
-      distanceListEl.innerHTML = "<li>내 위치가 아직 없습니다. 위치 공유를 시작하세요.</li>";
+      distanceListEl.innerHTML = "<div class=\"distance-card empty\">내 위치가 아직 없습니다. 위치 공유를 시작하세요.</div>";
       return;
     }
 
@@ -287,19 +349,163 @@
       const distM = calcDistanceMeters(me.lat, me.lng, person.lat, person.lng);
       entries.push({
         name: person.nickname || "익명",
-        distM
+        distM,
+        updatedAt: person.updatedAt,
+        accuracy: person.accuracy
       });
     }
 
     if (entries.length === 0) {
-      distanceListEl.innerHTML = "<li>다른 멤버의 위치를 기다리는 중입니다.</li>";
+      distanceListEl.innerHTML = "<div class=\"distance-card empty\">다른 멤버의 위치를 기다리는 중입니다.</div>";
       return;
     }
 
     entries.sort((a, b) => a.distM - b.distM);
-    distanceListEl.innerHTML = entries
-      .map((item) => `<li>${escapeHtml(item.name)}: ${formatDistance(item.distM)}</li>`)
-      .join("");
+    distanceListEl.innerHTML = entries.map((item) => {
+      const ageSec = getAgeSeconds(item.updatedAt);
+      const status = getFreshnessStatus(ageSec);
+      return `<div class="distance-card">
+        <div class="name">${escapeHtml(item.name)} · ${formatDistance(item.distM)}</div>
+        <div class="meta">마지막 업데이트 ${formatElapsed(ageSec)}</div>
+        <div class="status"><span class="badge ${status.className}">${status.label}</span></div>
+        <div class="submeta"><span class="badge badge-info">GPS ±${formatAccuracy(item.accuracy)}</span></div>
+      </div>`;
+    }).join("");
+  }
+
+  async function moveToMyLocation() {
+    if (!shareEnabled) {
+      updateStatus("위치 공유가 꺼져 있습니다.", "offline");
+      return;
+    }
+    try {
+      const pos = await getCurrentPosition();
+      map.panTo(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
+    } catch (err) {
+      updateStatus(`내 위치 이동 실패: ${err.message}`, "error");
+    }
+  }
+
+  function fitAllMarkers() {
+    if (!map || markers.size === 0) {
+      return;
+    }
+    const bounds = new kakao.maps.LatLngBounds();
+    for (const markerPack of markers.values()) {
+      bounds.extend(markerPack.marker.getPosition());
+    }
+    map.setBounds(bounds);
+  }
+
+  function setPowerPreset(preset) {
+    selectedPreset = preset;
+    refreshPresetButtons();
+    resetUpdateLoop();
+    if (preset === "focus") {
+      updateStatus("집중 모드: 10초 주기", "success");
+      return;
+    }
+    updateStatus("절전 모드: 60초 주기", "neutral");
+  }
+
+  async function toggleHideMyMarker() {
+    hideMyMarker = !hideMyMarker;
+    hideMyMarkerBtn.textContent = hideMyMarker ? "내 마커 보이기" : "내 마커 숨기기";
+    if (hideMyMarker) {
+      await db.ref(`rooms/${PUBLIC_ROOM_ID}/positions/${userId}`).remove();
+      if (markers.has(userId)) {
+        const me = markers.get(userId);
+        me.info.close();
+        me.marker.setMap(null);
+        markers.delete(userId);
+      }
+      updateStatus("내 마커 임시 숨김", "offline");
+    } else if (shareEnabled) {
+      await pushCurrentLocation();
+      updateStatus("내 마커 다시 표시", "success");
+    }
+    updateShareStateBanner();
+  }
+
+  function refreshPresetButtons() {
+    presetSaveBtn.classList.toggle("preset-active", selectedPreset === "save");
+    presetFocusBtn.classList.toggle("preset-active", selectedPreset === "focus");
+  }
+
+  function getPresetIntervalMs() {
+    return selectedPreset === "focus" ? FOCUS_INTERVAL_MS : DEFAULT_INTERVAL_MS;
+  }
+
+  function animateMarkerTo(marker, targetLatLng, durationMs) {
+    const start = marker.getPosition();
+    const sLat = start.getLat();
+    const sLng = start.getLng();
+    const eLat = targetLatLng.getLat();
+    const eLng = targetLatLng.getLng();
+    const t0 = performance.now();
+
+    function step(now) {
+      const p = Math.min(1, (now - t0) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const curLat = sLat + (eLat - sLat) * eased;
+      const curLng = sLng + (eLng - sLng) * eased;
+      marker.setPosition(new kakao.maps.LatLng(curLat, curLng));
+      if (p < 1) {
+        requestAnimationFrame(step);
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function toggleDistancePanel() {
+    distancePanelEl.classList.toggle("collapsed");
+  }
+
+  function onSheetPointerDown(event) {
+    isDraggingSheet = true;
+    dragStartY = event.clientY;
+    initialPanelCollapsed = distancePanelEl.classList.contains("collapsed");
+  }
+
+  function onSheetPointerUp(event) {
+    if (!isDraggingSheet) {
+      return;
+    }
+    const deltaY = event.clientY - dragStartY;
+    if (Math.abs(deltaY) < 24) {
+      isDraggingSheet = false;
+      return;
+    }
+    if (deltaY < 0) {
+      distancePanelEl.classList.remove("collapsed");
+    } else if (!initialPanelCollapsed) {
+      distancePanelEl.classList.add("collapsed");
+    }
+    isDraggingSheet = false;
+  }
+
+  function showToast(message) {
+    if (!toastEl) {
+      return;
+    }
+    toastEl.textContent = message;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastEl.classList.remove("show");
+    }, 1700);
+  }
+
+  function triggerHaptic() {
+    if (navigator.vibrate) {
+      navigator.vibrate(120);
+    }
+  }
+
+  function hideSkeleton() {
+    if (loadingSkeletonEl) {
+      loadingSkeletonEl.classList.add("hidden");
+    }
   }
 
   function calcDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -325,6 +531,44 @@
     return `${(meters / 1000).toFixed(2)}km`;
   }
 
+  function formatAccuracy(accuracy) {
+    if (typeof accuracy !== "number" || !Number.isFinite(accuracy)) {
+      return "-";
+    }
+    return `${Math.round(accuracy)}m`;
+  }
+
+  function getAgeSeconds(updatedAt) {
+    if (!updatedAt || typeof updatedAt !== "number") {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+  }
+
+  function getFreshnessStatus(ageSec) {
+    if (!Number.isFinite(ageSec)) {
+      return { className: "badge-offline", label: "오프라인" };
+    }
+    if (ageSec <= 60) {
+      return { className: "badge-success", label: "정상" };
+    }
+    if (ageSec <= 180) {
+      return { className: "badge-stale", label: "위치 오래됨" };
+    }
+    return { className: "badge-offline", label: "오프라인" };
+  }
+
+  function formatElapsed(ageSec) {
+    if (!Number.isFinite(ageSec)) {
+      return "정보 없음";
+    }
+    if (ageSec < 60) {
+      return `${ageSec}초 전`;
+    }
+    const min = Math.floor(ageSec / 60);
+    return `${min}분 전`;
+  }
+
   function escapeHtml(text) {
     return String(text)
       .replaceAll("&", "&amp;")
@@ -336,18 +580,65 @@
 
   function handleVisibilityChange() {
     if (document.hidden && shareEnabled) {
-      updateStatus("탭 비활성화: 위치 전송 일시중지");
-      clearInterval(intervalHandle);
-      intervalHandle = null;
-    } else if (!document.hidden && shareEnabled) {
-      updateStatus("탭 활성화: 위치 전송 재개");
-      resetUpdateLoop();
-      renderDistances(latestPeople);
+      if (autoPauseOnLeave) {
+        wasSharingBeforeHidden = true;
+        toggleSharing();
+      } else {
+        updateStatus("탭 비활성화: 위치 전송 일시중지");
+        clearInterval(intervalHandle);
+        intervalHandle = null;
+        updateShareStateBanner();
+      }
+    } else if (!document.hidden) {
+      if (autoPauseOnLeave && wasSharingBeforeHidden) {
+        wasSharingBeforeHidden = false;
+        toggleSharing();
+      } else if (shareEnabled) {
+        updateStatus("탭 활성화: 위치 전송 재개");
+        resetUpdateLoop();
+        renderDistances(latestPeople);
+        updateShareStateBanner();
+      }
     }
   }
 
-  function updateStatus(message) {
+  function updateStatus(message, status = "neutral") {
     myStatusEl.textContent = message;
+    myStatusEl.className = `badge ${getStatusBadgeClass(status, message)}`;
+  }
+
+  function getStatusBadgeClass(status, message) {
+    if (status === "error" || message.includes("실패")) {
+      return "badge-error";
+    }
+    if (status === "offline" || message.includes("중지") || message.includes("일시중지")) {
+      return "badge-offline";
+    }
+    if (status === "stale") {
+      return "badge-stale";
+    }
+    if (status === "success" || message.includes("활성화") || message.includes("연결")) {
+      return "badge-success";
+    }
+    return "badge-neutral";
+  }
+
+  function updateShareStateBanner() {
+    if (!shareStateBannerEl) {
+      return;
+    }
+    if (!shareEnabled) {
+      shareStateBannerEl.textContent = "공유 일시중지";
+      shareStateBannerEl.classList.add("paused");
+      return;
+    }
+    if (hideMyMarker) {
+      shareStateBannerEl.textContent = "공유 중 (내 마커 숨김)";
+      shareStateBannerEl.classList.remove("paused");
+      return;
+    }
+    shareStateBannerEl.textContent = "현재 공유 중";
+    shareStateBannerEl.classList.remove("paused");
   }
 
   init().catch((err) => {
